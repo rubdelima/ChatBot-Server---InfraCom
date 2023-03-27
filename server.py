@@ -30,10 +30,12 @@ thread_run = True
 def run_command(command, args, client_address, data):
     match(command):
             case 'chefia':
-                clients[client_address] = User(client_address, args)
-                print(f'{get_time()} Cliente conectado: {args[0]} (mesa {args[1]})')
+                if client_address not in clients.keys():
+                    clients[client_address] = User(client_address, args)
+                    print(f'{get_time()} Cliente conectado: {args[0]} (mesa {args[1]})')
+                
                 server_socket.sendto(f'O que deseja fazer?{lista_opcoes}'.encode(), client_address)
-
+                
             case 'sair':
                 # remove o cliente do dicionário de clientes se o valor gasto for igual ao valor pago
                 if client_address in clients:
