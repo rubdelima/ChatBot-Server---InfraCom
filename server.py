@@ -23,7 +23,7 @@ print(get_time() + ' Servidor UDP iniciado.')
 cardapio = {'Sushi': 10,'Carne-de-Sol': 20}
 lista_opcoes = ['sair', 'cardapio', 'pedido', 'pagar', 'fatura']
 clients = {}
-
+mesas = {}
 
 thread_run = True
 
@@ -33,6 +33,10 @@ def run_command(command, args, client_address, data):
                 if client_address not in clients.keys():
                     clients[client_address] = User(client_address, args)
                     print(f'{get_time()} Cliente conectado: {args[0]} (mesa {args[1]})')
+                    if args[1] not in mesas.keys():
+                        mesas[args[1]] = [clients[client_address]]
+                    else:
+                        mesas[args[1]].append(clients[client_address])
                 
                 server_socket.sendto(f'O que deseja fazer?{lista_opcoes}'.encode(), client_address)
                 
