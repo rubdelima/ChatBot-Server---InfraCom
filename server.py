@@ -49,7 +49,7 @@ def run_command(command, args, client_address, data):
 
             case 'cardapio':
                 # envia ao cliente o cardápio
-                cardapio_str = ', '.join([f'{k} ({v} reais)' for k,v in cardapio.items()])
+                cardapio_str = ','.join([f'{k} ({v} reais)' for k,v in cardapio.items()])
                 server_socket.sendto(cardapio_str.encode(), client_address)
 
             case 'fatura':
