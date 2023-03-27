@@ -62,8 +62,8 @@ while True:
             resposta = data.decode()
             print(f'{get_time()} Server: {resposta}')
             if 'registrado' in resposta: counter += 1
-            pedido = prompt(f'{get_time()} {user_name}> ', completer=cardapio)
-            client_socket.sendto(str(command).encode(), server_address)
+            pedido = prompt(f'{get_time()} {user_name}> ', completer=cardapio).split()[0]
+            client_socket.sendto(str(pedido).encode(), server_address)
         
             
     else:

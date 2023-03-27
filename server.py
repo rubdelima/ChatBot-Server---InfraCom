@@ -20,7 +20,7 @@ server_socket.bind(server_address)
 print(get_time() + ' Servidor UDP iniciado.')
 
 # cria um dicionário para armazenar os clientes conectados
-cardapio = {'Sushi': 10,'Carne de Sol': 20}
+cardapio = {'Sushi': 10,'Carne-de-Sol': 20}
 lista_opcoes = ['sair', 'cardapio', 'pedido', 'pagar', 'fatura']
 clients = {}
 
