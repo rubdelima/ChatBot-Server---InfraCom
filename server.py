@@ -56,7 +56,7 @@ def run_command(command, args, client_address, data):
                 cardapio_str = ','.join([f'{k} ({v} reais)' for k,v in cardapio.items()])
                 server_socket.sendto(cardapio_str.encode(), client_address)
 
-            case 'fatura':
+            case 'conta individual':
                 # envia ao cliente a lista de pedidos e o valor total da fatura
                 if client_address in clients:
                     server_socket.sendto((clients[client_address].get_fatura()).encode(), client_address)
@@ -71,6 +71,10 @@ def run_command(command, args, client_address, data):
                 # recebe a mensagem perguntando quantos pedidos o cliente deseja fazer
                 server_socket.sendto('Quantos pedidos deseja fazer?'.encode(), client_address)
                 clients[client_address].fase = 'pedido1'
+                
+            case 'conta da mesa':
+                message = ','.join([f'{i.nome} ({i.valor_gasto} reais)' for i in mesas[clients[client_address].mesa]])
+                server_socket.sendto(message.encode(), client_address)
 
             case _:
                 match(clients[client_address].fase):

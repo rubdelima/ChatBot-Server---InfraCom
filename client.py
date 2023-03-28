@@ -26,8 +26,8 @@ print(f'{get_time()} Server: {data.decode()}')
 
 #lista de comandos e cardápio para autocompletion
 cardapio = WordCompleter([])
-comandos = WordCompleter(['chefia', 'levantar da mesa', 'pagar', 
-                          'conta da mesa', 'conta individual', 'pedido', 'cardapio'])
+comandos = WordCompleter(['chefia', 'levantar da mesa', 'pagar', 'pedido',
+                          'conta da mesa', 'conta individual', 'cardapio'])
 
 while True:
     
@@ -47,6 +47,11 @@ while True:
         print(f'{get_time()} Server: o nosso cardápio tem:')
         [print(i) for i in cardapio_data]
     
+    elif command == 'fatura mesa':
+        print(f'{get_time()} Server: os valores da cada um da mesa é')
+        fatura_mesa = data.decode().split(',')
+        [print(i) for i in fatura_mesa]
+        
     elif command == 'pedido':
         print(f'{get_time()} Server: {data.decode()}')
         while True:
@@ -56,12 +61,14 @@ while True:
                 break
             except ValueError:
                 print("Por favor digite um valor inteiro")
+                
         counter = 0
-        while counter < command:
+        while True: # "do - while de python"
             data, address = client_socket.recvfrom(1024)
             resposta = data.decode()
             print(f'{get_time()} Server: {resposta}')
             if 'registrado' in resposta: counter += 1
+            if not (counter < command): break
             pedido = prompt(f'{get_time()} {user_name}> ', completer=cardapio).split()[0]
             client_socket.sendto(str(pedido).encode(), server_address)
         
