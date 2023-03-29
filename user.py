@@ -17,7 +17,7 @@ class User():
     
     def pay(self):
         self.valor_pago = self.valor_gasto
-        
+
     def get_fatura(self) -> str:
         return f'Pedidos realizados = {",".join(self.pedidos)} Total: {self.valor_gasto} Valor que falta pagar: {self.valor_gasto - self.valor_pago}'
     

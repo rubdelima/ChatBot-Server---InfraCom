@@ -20,8 +20,8 @@ server_socket.bind(server_address)
 print(get_time() + ' Servidor UDP iniciado.')
 
 # cria um dicionário para armazenar os clientes conectados
-cardapio = {'Sushi': 10,'Carne-de-Sol': 20}
-lista_opcoes = ['sair', 'cardapio', 'pedido', 'pagar', 'fatura']
+cardapio = {'Refrigerante': 5, 'Sushi': 10,'Carne-de-Sol': 20}
+lista_opcoes = ['sair', 'cardapio', 'pedido', 'pagar', 'conta individual', 'conta da mesa']
 clients = {}
 mesas = {}
 
@@ -45,6 +45,7 @@ def run_command(command, args, client_address, data):
                 if client_address in clients:
                     client = clients[client_address]
                     if client.valor_pago == client.valor_gasto:
+                        mesas[client.mesa].remove(clients[client_address])
                         clients.pop(client_address)
                         print(f'{get_time()} Cliente desconectado: {client.nome} (mesa {client.mesa})')
                         server_socket.sendto('Ok, você pode sair.'.encode(), client_address)
@@ -73,7 +74,7 @@ def run_command(command, args, client_address, data):
                 clients[client_address].fase = 'pedido1'
                 
             case 'conta da mesa':
-                message = ','.join([f'{i.nome} ({i.valor_gasto} reais)' for i in mesas[clients[client_address].mesa]])
+                message = ','.join([f'{i.nome} ({i.valor_gasto-i.valor_pago} reais)' for i in mesas[clients[client_address].mesa]])
                 server_socket.sendto(message.encode(), client_address)
 
             case _:
