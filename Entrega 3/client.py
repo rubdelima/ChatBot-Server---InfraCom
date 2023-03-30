@@ -2,6 +2,8 @@ import socket
 import datetime
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import WordCompleter
+from tkinter import filedialog, Tk
+import os
 
 def get_time() -> str:
     now = datetime.datetime.now()
@@ -29,6 +31,11 @@ cardapio = WordCompleter([])
 comandos = WordCompleter(['chefia', 'levantar da mesa', 'pagar', 'pedido',
                           'conta da mesa', 'conta individual', 'cardapio'])
 
+# Janela de seleção de arquivos
+'''
+root = Tk()
+root.withdraw()
+'''
 while True:
     
     command = prompt(f'{get_time()} {user_name}> ', completer=comandos)
@@ -36,16 +43,48 @@ while True:
     data, address = client_socket.recvfrom(1024)
     
     if command == 'sair':
-        print(f'{get_time()} Server: {data.decode()}')
-        if data.decode() == 'Ok, você pode sair.':
+        saida = data.decode()
+        print(f'{get_time()} Server: {saida}')
+        if data.decode() == 'Fechando o server...':
             print('Desconectado com sucesso')
             client_socket.close()
             break
+    
+    elif command == 'fechar sevidor':
+        print(f'{get_time()} Server: {data.decode()}')
+        if data.decode() == 'Fechando o server...':
+            print('Desconectado com sucesso')
+            client_socket.close()
+            break
+        
     elif command == 'cardapio':
         cardapio_data = data.decode().split(',')
         cardapio = WordCompleter(cardapio_data)
         print(f'{get_time()} Server: o nosso cardápio tem:')
         [print(i) for i in cardapio_data]
+    
+    elif command == 'enviar arquivo':
+        # Janela de seleção de arquivo para o usuário
+        file_path = filedialog.askopenfilename()
+        
+        # Obtenha infos do arquivo selecionado
+        file_size = os.path.getsize(file_path)
+        filename = os.path.basename(file_path)
+        client_socket.sendto(f'{file_size}+++{filename}'.encode(), server_address)
+        
+        # Recebedo resposta do servidor
+        data, address = client_socket.recvfrom(1024)
+        resposta = data.decode()
+        print(f'{get_time()} Server: {data.decode()}')
+        
+        #Eniando os arquios para o servidor
+        with open(file_path, 'rb') as f:
+            while True:
+                chunk = f.read(1024)
+                if not chunk:
+                    break
+                client_socket.sendto(chunk, server_address)
+        
     
     elif command == 'fatura mesa':
         print(f'{get_time()} Server: os valores da cada um da mesa é')

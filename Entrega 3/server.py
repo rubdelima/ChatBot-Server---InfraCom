@@ -1,7 +1,7 @@
 import socket
 import datetime
 from user import User
-
+import os
 # função para obter a hora atual
 def get_time() -> str:
     now = datetime.datetime.now()
@@ -24,10 +24,12 @@ cardapio = {'Refrigerante': 5, 'Sushi': 10,'Carne-de-Sol': 20}
 lista_opcoes = ['sair', 'cardapio', 'pedido', 'pagar', 'conta individual', 'conta da mesa']
 clients = {}
 mesas = {}
+lista_relatorio = []
 
-thread_run = True
+server_is_on = True
 
-def run_command(command, args, client_address, data):
+
+def run_command(command, args, client_address, data) -> bool:
     match(command):
             case 'chefia':
                 if client_address not in clients.keys():
@@ -46,7 +48,7 @@ def run_command(command, args, client_address, data):
                     client = clients[client_address]
                     if client.valor_pago == client.valor_gasto:
                         mesas[client.mesa].remove(clients[client_address])
-                        clients.pop(client_address)
+                        lista_relatorio.append(clients.pop(client_address))
                         print(f'{get_time()} Cliente desconectado: {client.nome} (mesa {client.mesa})')
                         server_socket.sendto('Ok, você pode sair.'.encode(), client_address)
                     else:
@@ -76,6 +78,24 @@ def run_command(command, args, client_address, data):
             case 'conta da mesa':
                 message = ','.join([f'{i.nome} ({i.valor_gasto-i.valor_pago} reais)' for i in mesas[clients[client_address].mesa]])
                 server_socket.sendto(message.encode(), client_address)
+            
+            case 'enviar arquivo':
+                server_socket.sendto('Pode enviar'.encode(), client_address)
+                clients[client_address].fase = 'arquivo1'
+            
+            case 'fechar servidor':
+                if len(clients.keys()) == 1:
+                    client = clients[client_address]
+                    if client.valor_pago == client.valor_gasto:
+                        mesas[client.mesa].remove(clients[client_address])
+                        lista_relatorio.append(clients.pop(client_address))
+                        print(f'{get_time()} Cliente desconectado: {client.nome} (mesa {client.mesa})')
+                        server_socket.sendto('Fechando o server...'.encode(), client_address)
+                        return False
+                    else:
+                        server_socket.sendto('Só vou fechar quando voce pagar a fatura!'.encode(), client_address)
+                else:
+                    server_socket.sendto('Não é possível fechar a loja pois ainda tem outros clientes'.encode(), client_address)
 
             case _:
                 match(clients[client_address].fase):
@@ -101,23 +121,35 @@ def run_command(command, args, client_address, data):
                             server_socket.sendto(mensagem.encode(), client_address)
                         else:
                             server_socket.sendto('Pedido inválido.'.encode(), client_address)
-                        
+                    
+                    case 'arquivo1':
+                        file_size, filename = command.split('+++')
+                        server_socket.sendto(f'Recebendo o arquivo {filename}: de {file_size}Kb'.encode(), client_address)
+                        clients[client_address].fase = 'aquivo2'
+                    
+                    
+                    
                     case _:
                         server_socket.sendto('Código inválido'.encode(), client_address)
                 # operação inválida
+    return True
 
 
 if __name__ == '__main__':
-    while True:
+    while server_is_on:
         data, client_address = server_socket.recvfrom(1024)
         message = data.decode()
         parts = message.split(':')
         command = parts[0]
         args = parts[1:]
-        
-        run_command(command, args, client_address, data)
+        server_is_on = run_command(command, args, client_address, data)
         
         for i in clients.keys():
             print(clients[i])
+        
+    
+    with open("server_files\\relatorio.txt", "w") as r_file:
+        for cliente in lista_relatorio:
+            print(cliente, file=r_file)
 
 

@@ -11,6 +11,7 @@ class User():
         self.fase = None
         self.novo_pedido =[]
         self.novo_pedido_qnt =0
+        self.arquivo_estado = None
         
     def __str__(self):
         return f"Nome:{self.nome}, mesa: {self.mesa}, ip/porta = {self.address} pedidos = {self.pedidos}, valor gasto: {self.valor_gasto}, valor pago: {self.valor_pago}"
