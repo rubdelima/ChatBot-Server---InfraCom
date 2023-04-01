@@ -3,9 +3,9 @@ Para executar este código, siga as instruções abaixo:
 
 1. Abra dois terminais separados.
 
-2. Em um terminal, execute o arquivo server.py digitando o seguinte comando no diretório do arquivo: server.py
+2. Em um terminal, execute o arquivo server.py digitando o seguinte comando no diretório do arquivo: "py server.py"
 
-3. No segundo terminal, execute o arquivo client.py digitando o seguinte comando no diretório do arquivo: client.py
+3. No segundo terminal, execute o arquivo client.py digitando o seguinte comando no diretório do arquivo: "py client.py"
 
 4. Selecione o arquivo que deseja enviar quando solicitado pelo cliente.
 
