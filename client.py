@@ -1,50 +1,49 @@
 import socket
-import datetime
+import os
+from tkinter.filedialog import askopenfilename
+from tqdm import tqdm
 
-def get_time() -> str:
-    now = datetime.datetime.now()
-    time = now.strftime("%H:%M")
-    return time
+BUFFER_SIZE = 1024
 
-# cria o socket UDP
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-# define o IP e a porta do servidor
 server_address = ('localhost', 5000)
+client_address = ('localhost', 0)
 
-# solicita ao usuário o nome e o número da mesa
-user_name = input('Digite seu nome: ')
-table_number = input('Digite o número da mesa: ')
+def send_file(sock, filename):
+    filesize = os.path.getsize(filename)    # tamanho do arquivo
+    data = f"{os.path.basename(filename)}|{filesize}"
+    sock.sendto(data.encode('utf-8'), server_address)   # codifica em bytes e envia para o servidor
+    ack, _ = sock.recvfrom(BUFFER_SIZE)
 
-# envia o comando de conexão e os argumentos para o servidor
-message = f'chefia:{user_name}:{table_number}'
-client_socket.sendto(message.encode(), server_address)
-data, address = client_socket.recvfrom(1024)
-print(f'{get_time()} Server: {data.decode()}')
-
-while True:
+    with open(filename, 'rb') as f:
+        with tqdm(total=filesize, desc=f'Sending {filename}', unit='B', unit_scale=True) as pbar:
+            while True:
+                data = f.read(BUFFER_SIZE)  # lê 1024 bytes por vez
+                if not data:
+                    break
+                sock.sendto(data, server_address)   # envia os bytes
+                pbar.update(len(data))
+        print(f"{filename} sent")
     
-    command = input(f'{get_time()} {user_name}> ')
-    if command == 'sair':
-        client_socket.sendto('sair'.encode(), server_address)
-        data, address = client_socket.recvfrom(1024)
-        print(f'{get_time()} Server: {data.decode()}')
-        if data.decode() == 'Ok, você pode sair.':
-            print('Desconectado com sucesso')
-            client_socket.close()
-            break
-    elif command == 'pedido':
-        client_socket.sendto(command.encode(), server_address)
-        data, address = client_socket.recvfrom(1024)
-        print(f'{get_time()} Server: {data.decode()}')
+    # recebe o arquivo de volta do servidor
+    client_directory = f"client_files/received"
+    if not os.path.exists(client_directory):
+        os.makedirs(client_directory)
+    with open(f"{client_directory}/{os.path.basename(filename)}", 'wb') as f:
+        received = 0
+        while received < filesize:
+            data, _ = sock.recvfrom(BUFFER_SIZE)
+            f.write(data)
+            received += len(data)
+        print(f"{filename} received from server")
 
-        num_pedidos = input(f'{get_time()} {user_name}> ')
-        client_socket.sendto(num_pedidos.encode(), server_address)
-        data, address = client_socket.recvfrom(1024)
-        print(f'{get_time()} Server: {data.decode()}')
+def main():
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.bind(client_address)   # vincula com o endereço de destino
+        print(f"Client started on {sock.getsockname()}")
 
-    else:
-        client_socket.sendto(command.encode(), server_address)
-        data, address = client_socket.recvfrom(1024)
-        print(f'{get_time()} Server: {data.decode()}')
+        filename = askopenfilename()    # seleciona o arquivo a ser enviado
 
+        send_file(sock, filename)   # envia o arquivo
+
+if __name__ == '__main__':
+    main()
