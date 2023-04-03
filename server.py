@@ -19,17 +19,25 @@ def receive_file(sock, address, filename, filesize):
             f.write(data)
             received += len(data)
         print(f"{filename} received from {address}")
+        f.close()
+    
+    return client_directory
 
-    # reabrir o arquivo e enviar de volta para o cliente
-    with open(f"{client_directory}/{filename}", 'rb') as f:
-        with tqdm(total=filesize, desc=f'Sending {filename}', unit='B', unit_scale=True) as pbar:
+def send_file(sock, filename, address):
+    filesize = os.path.getsize(filename)
+    
+    with open(filename, 'rb') as f:
+        with tqdm(total=filesize, desc=f'Sending {os.path.basename(filename)}', unit='B', unit_scale=True) as pbar:
             while True:
                 data = f.read(BUFFER_SIZE)
                 if not data:
                     break
+
                 sock.sendto(data, address)
                 pbar.update(len(data))
-        print(f"{filename} sent")
+
+        print(f"{os.path.basename(filename)} sent")
+        f.close()
 
 if __name__ == '__main__':
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -43,8 +51,12 @@ if __name__ == '__main__':
 
             filename, filesize = data.decode('utf-8').split('|')
             filesize = int(filesize)
+            print(f"o tamanho do arquivo que o client vai enviar e {filesize}")
 
             sock.sendto('ack'.encode('utf-8'), address)
             thread_list.append(Thread(target=receive_file, args=(sock, address, filename, filesize)))
-            
-            receive_file(sock, address, filename, filesize)
+
+            directory = receive_file(sock, address, filename, filesize)
+            filename = f"{directory}/{filename}"
+            print(f"o tamanho do arquivo que o servidor vai enviar e {filesize}")
+            send_file(sock, filename, address)
