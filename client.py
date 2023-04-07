@@ -43,6 +43,7 @@ def receive_file(sock, filename, filesize):
         os.makedirs(client_directory)
 
     with open(f"{client_directory}/{filename}", 'wb') as f:
+        # variável para comparar a quantidade de bytes recebidos
         received = 0
         while received < filesize:
             # Recebe os dados do servidor
