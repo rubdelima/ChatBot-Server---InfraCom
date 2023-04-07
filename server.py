@@ -12,14 +12,17 @@ server_address = ('localhost', 5000)
 # Cria um dicionário para armazenar a identificação de cada cliente conectado
 clients = {}
 
-# Cria uma lista para armazenar as threads criada
+# Cria uma lista para armazenar as threads criada (não utilizado na primeira entrega)
 thread_list = []
-
 
 # Função que recebe um arquivo enviado por um cliente e o salva no diretório do cliente correspondente
 def receive_file(sock, address, filename, filesize):
+    # variavel para comparar a quantidade de bits recebidos
     received = 0
+    
     client_directory = f"server_files/{clients[address]}"
+    
+    # Cria o diretório caso ainda não exista
     if not os.path.exists(client_directory):
         os.makedirs(client_directory)
     with open(f"{client_directory}/{filename}", 'wb') as f:
@@ -75,14 +78,12 @@ if __name__ == '__main__':
             # Envia uma mensagem de confirmação ('ack') para o cliente
             sock.sendto('ack'.encode('utf-8'), address)
 
-            # Cria uma nova thread para receber o arquivo do cliente e adiciona a thread na lista
+            # Cria uma nova thread para receber o arquivo do cliente e adiciona a thread na lista (não usado nessa entrega)
             thread_list.append(Thread(target=receive_file, args=(sock, address, filename, filesize)))
 
             # Recebe o arquivo enviado pelo cliente e armazena o caminho do arquivo no diretório do cliente
             directory = receive_file(sock, address, filename, filesize)
             filename = f"{directory}/{filename}"
-            print(f"o tamanho do arquivo que o servidor vai enviar e {filesize}")
 
             # Envia o arquivo de volta para o cliente
-
             send_file(sock, filename, address)
