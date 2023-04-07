@@ -17,7 +17,7 @@ thread_list = []
 
 # Função que recebe um arquivo enviado por um cliente e o salva no diretório do cliente correspondente
 def receive_file(sock, address, filename, filesize):
-    # variavel para comparar a quantidade de bits recebidos
+    # variavel para comparar a quantidade de bytes recebidos
     received = 0
     
     client_directory = f"server_files/{clients[address]}"
