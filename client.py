@@ -12,7 +12,6 @@ client_address = ('localhost', 0)
 def send_file(sock, filename):
     # Obtém o tamanho do arquivo
     filesize = os.path.getsize(filename)
-    print(f"o tamanho do arquivo enviado para o servidor e {filesize}")
     data = f"{os.path.basename(filename)}|{filesize}"
     # Codifica os dados e envia para o servidor
     sock.sendto(data.encode('utf-8'), server_address)
@@ -38,7 +37,8 @@ def send_file(sock, filename):
 
 def receive_file(sock, filename, filesize):
     client_directory = f"client_files/received"
-
+    
+    # Caso o diretório não exista, será criado
     if not os.path.exists(client_directory):
         os.makedirs(client_directory)
 
@@ -66,8 +66,7 @@ def main():
 
         # envia o arquivo para o servidor e obtém o tamanho do arquivo
         filesize = send_file(sock, filename)
-        # TODO: devemos pedir para o servidor o novo filesize, ou usar o mesmo?
-        print(f"o tamanho do arquivo que o client espera receber e {filesize}")
+        
         # recebe o arquivo do servidor
         receive_file(sock, os.path.basename(filename), filesize)
 
