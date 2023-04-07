@@ -73,7 +73,6 @@ if __name__ == '__main__':
             # Extrai o nome do arquivo e o tamanho do arquivo dos dados recebidos
             filename, filesize = data.decode('utf-8').split('|')
             filesize = int(filesize)
-            print(f"o tamanho do arquivo que o client vai enviar e {filesize}")
 
             # Envia uma mensagem de confirmação ('ack') para o cliente
             sock.sendto('ack'.encode('utf-8'), address)
