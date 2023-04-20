@@ -2,6 +2,7 @@ import socket
 import os
 from threading import Thread
 from tqdm import tqdm
+import time
 
 # Define o tamanho do buffer utilizado na transferência de dados
 BUFFER_SIZE = 1024
@@ -19,17 +20,30 @@ thread_list = []
 def receive_file(sock, address, filename, filesize):
     # variavel para comparar a quantidade de bytes recebidos
     received = 0
-    
+
     client_directory = f"server_files/{clients[address]}"
-    
+
     # Cria o diretório caso ainda não exista
     if not os.path.exists(client_directory):
         os.makedirs(client_directory)
+
+    # Inicializa o número de sequência
+    sequence_number = 0
+
     with open(f"{client_directory}/{filename}", 'wb') as f:
         while received < filesize:
             data, _ = sock.recvfrom(BUFFER_SIZE)
             f.write(data)
             received += len(data)
+
+            # Envia confirmação de recebimento para o cliente
+            print(f'ack {sequence_number} enviado')
+            sock.sendto(str(sequence_number).encode(), address)
+
+
+            # Incrementa o número de sequência
+            sequence_number += 1
+
         print(f"{filename} received from {address}")
         f.close()
 
@@ -86,3 +100,4 @@ if __name__ == '__main__':
 
             # Envia o arquivo de volta para o cliente
             send_file(sock, filename, address)
+
