@@ -2,12 +2,13 @@ import socket
 import os
 from tkinter.filedialog import askopenfilename
 from tqdm import tqdm
+import time
+
 
 BUFFER_SIZE = 1024
 
 server_address = ('localhost', 5000)
 client_address = ('localhost', 0)
-
 
 def send_file(sock, filename):
     # Obtém o tamanho do arquivo
@@ -17,6 +18,9 @@ def send_file(sock, filename):
     sock.sendto(data.encode('utf-8'), server_address)
     # Recebe uma mensagem de confirmação (ack) do servidor
     ack, _ = sock.recvfrom(BUFFER_SIZE)
+
+    # Número de sequência inicial
+    sequence_number = 0
 
     with open(filename, 'rb') as f:
         with tqdm(total=filesize, desc=f'Sending {filename}', unit='B', unit_scale=True) as pbar:
@@ -29,6 +33,38 @@ def send_file(sock, filename):
                 sock.sendto(data, server_address)
                 # Atualiza a barra de progresso com o número de bytes enviados
                 pbar.update(len(data))
+
+                # Inicia o temporizador
+                start_time = time.time()
+
+                # Tempo limite para retransmissão (em segundos)
+                timeout = 1
+
+                while True:
+                    # Verifica se o temporizador expirou
+                    if time.time() - start_time > timeout:
+                        # Retransmite os dados
+                        sock.sendto(data, server_address)
+                        # Reinicia o temporizador
+                        start_time = time.time()
+
+                    # Tenta receber a confirmação do servidor
+                    try:
+                        # Configura o socket para não bloquear a espera de dados
+                        sock.settimeout(0.1)
+                        # Recebe dados do servidor
+                        ack_data, server = sock.recvfrom(BUFFER_SIZE)
+                        # Verifica se a confirmação é para o pacote enviado
+                        if int(ack_data) == sequence_number:
+                            print(f'ack {sequence_number} recebido')
+                            # Incrementa o número de sequência
+                            sequence_number += 1
+                            # Para o loop interno
+                            break
+                    except socket.timeout:
+                        # Continua o loop interno se não receber dados do servidor
+                        continue
+
         print(f"{filename} sent")
         f.close()
 
