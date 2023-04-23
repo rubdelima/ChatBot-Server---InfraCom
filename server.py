@@ -3,6 +3,7 @@ import os
 from threading import Thread
 from tqdm import tqdm
 import time
+from common import *
 
 # Define o tamanho do buffer utilizado na transferência de dados
 BUFFER_SIZE = 1024
@@ -33,6 +34,16 @@ def receive_file(sock, address, filename, filesize):
     with open(f"{client_directory}/{filename}", 'wb') as f:
         while received < filesize:
             data, _ = sock.recvfrom(BUFFER_SIZE)
+            data = eval(data.decode())
+
+            seq_num_received = data['seq']
+            checksum = data['checksum']
+            payload = data['payload']
+
+            if seq_num_received == sequence_number and checksum_(checksum, payload):
+                # TODO: continuar daqui
+                #sock.sendto(send_ack(1), address)
+
             f.write(data)
             received += len(data)
 

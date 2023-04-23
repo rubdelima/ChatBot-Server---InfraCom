@@ -3,6 +3,7 @@ import os
 from tkinter.filedialog import askopenfilename
 from tqdm import tqdm
 import time
+from common import *
 
 
 BUFFER_SIZE = 1024
@@ -14,8 +15,10 @@ def send_file(sock, filename):
     # Obtém o tamanho do arquivo
     filesize = os.path.getsize(filename)
     data = f"{os.path.basename(filename)}|{filesize}"
+
     # Codifica os dados e envia para o servidor
     sock.sendto(data.encode('utf-8'), server_address)
+
     # Recebe uma mensagem de confirmação (ack) do servidor
     ack, _ = sock.recvfrom(BUFFER_SIZE)
 
@@ -29,8 +32,13 @@ def send_file(sock, filename):
                 data = f.read(BUFFER_SIZE)
                 if not data:
                     break
+                
+                data = create_header(data.decode(), sequence_number);
+
                 # Envia os bytes para o servidor
+                print("Enviando para o servidor")
                 sock.sendto(data, server_address)
+
                 # Atualiza a barra de progresso com o número de bytes enviados
                 pbar.update(len(data))
 
@@ -44,7 +52,9 @@ def send_file(sock, filename):
                     # Verifica se o temporizador expirou
                     if time.time() - start_time > timeout:
                         # Retransmite os dados
+                        print("ACK nao recebido. Reenviando para o servidor")
                         sock.sendto(data, server_address)
+
                         # Reinicia o temporizador
                         start_time = time.time()
 
@@ -52,8 +62,10 @@ def send_file(sock, filename):
                     try:
                         # Configura o socket para não bloquear a espera de dados
                         sock.settimeout(0.1)
+
                         # Recebe dados do servidor
                         ack_data, server = sock.recvfrom(BUFFER_SIZE)
+
                         # Verifica se a confirmação é para o pacote enviado
                         if int(ack_data) == sequence_number:
                             print(f'ack {sequence_number} recebido')
