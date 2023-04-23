@@ -52,7 +52,7 @@ def send_file(sock, filename):
                     # Verifica se o temporizador expirou
                     if time.time() - start_time > timeout:
                         # Retransmite os dados
-                        print("ACK nao recebido. Reenviando para o servidor")
+                        print("ACK nao recebido ou NACK recebido. Reenviando para o servidor")
                         sock.sendto(data, server_address)
 
                         # Reinicia o temporizador
@@ -65,13 +65,12 @@ def send_file(sock, filename):
 
                         # Recebe dados do servidor
                         ack_data, server = sock.recvfrom(BUFFER_SIZE)
+                        ack = rcv_ack(ack_data,~ sequence_number)
 
                         # Verifica se a confirmação é para o pacote enviado
-                        if int(ack_data) == sequence_number:
+                        if ack:
                             print(f'ack {sequence_number} recebido')
-                            # Incrementa o número de sequência
-                            sequence_number += 1
-                            # Para o loop interno
+                            sequence_number = 1 - sequence_number
                             break
                     except socket.timeout:
                         # Continua o loop interno se não receber dados do servidor

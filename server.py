@@ -41,20 +41,15 @@ def receive_file(sock, address, filename, filesize):
             payload = data['payload']
 
             if seq_num_received == sequence_number and checksum_(checksum, payload):
-                # TODO: continuar daqui
-                #sock.sendto(send_ack(1), address)
+                sock.sendto(send_ack(1, sequence_number), address)
+                sequence_number = 1 - sequence_number
 
-            f.write(data)
-            received += len(data)
+                f.write(payload)
+                received += len(data)
+            else:
+                sock.sendto(send_ack(0, sequence_number), address)
 
-            # Envia confirmação de recebimento para o cliente
-            print(f'ack {sequence_number} enviado')
-            sock.sendto(str(sequence_number).encode(), address)
-
-
-            # Incrementa o número de sequência
-            sequence_number += 1
-
+            
         print(f"{filename} received from {address}")
         f.close()
 

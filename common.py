@@ -31,10 +31,21 @@ def checksum_(sum, payload):
     else:
         return False
 
-def send_ack(ack):
+def send_ack(ack, seq_n):
     if ack:
-        data = create_header("ACK")
+        data = create_header("ACK", seq_n)
     else:
-        data = create_header("NACK")
+        data = create_header("NACK", seq_n)
     
     return data
+
+def rcv_ack(data, seq_num):
+    data = eval(data.decode())
+    seq_num_recv = data['seq']
+    checksum = data['checksum']
+    payload = data['payload']
+
+    if checksum_(checksum, payload) and seq_num_recv == seq_num and payload == "ACK":
+        return True
+    else:
+        return False
