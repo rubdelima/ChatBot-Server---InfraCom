@@ -4,6 +4,7 @@ from tqdm import tqdm
 from threading import Thread
 import time
 import random
+import struct
 
 class RDT():
     def __init__(self, tipo):
@@ -51,12 +52,13 @@ class RDT():
                     
                 # Escreve os dados no arquivo
                 data = self.unpack(data)
+                packet_format = f"!HH{len(data['payload'])}s"
                 if data['checksum'] == self.checksum(data['payload']):
                     f.write(data['payload'])
                     received += len(data['payload'])
-                    data['seq'] = 1- data['seq']
-                    data = str(data)
-                    self.sock.sendto(data.encode(), env)
+                    data['seq'] = 1-data['seq']
+                    data = struct.pack(packet_format, data['seq'], data['checksum'], data['payload'])
+                    self.sock.sendto(data, env)
                 # Incrementa o número de bytes recebidos
                 
             print(f"{filename} received from server")
@@ -79,7 +81,7 @@ class RDT():
             with tqdm(total=filesize, desc=f'Sending {filename}', unit='B', unit_scale=True) as pbar:
                 while True:
                     # Lê 1024 bytes por vez
-                    data = f.read(self.BUFFER_SIZE-800)
+                    data = f.read(self.BUFFER_SIZE-4)
                     if not data:
                         break
                     # Envia os bytes para o servidor
@@ -131,19 +133,22 @@ class RDT():
 
 
     def pack(self, data):
-        chcksum = self.checksum(data)
-        return str({
-            'seq': self.state,
-            'checksum': chcksum,
-            'payload' : data
-        }).encode()
+        packet_format = f"!HH{len(data)}s"
+        
+        checksum = self.checksum(data)
+
+        packed_data = struct.pack(packet_format, self.state, checksum, data)
+        return packed_data
     
     def unpack(self, data) -> dict:
-        data = eval(data.decode())
-        seq_num = data['seq']
-        checksum = data['checksum']
-        payload = data['payload']
-        return data
+        packet_format = f"!HH{len(data)-4}s"
+        
+        seq_num, checksum, unpacked_data = struct.unpack(packet_format, data)
+        return {
+            'seq': seq_num,
+            'checksum': checksum,
+            'payload' : unpacked_data
+        }
     
         
     def close(self):
