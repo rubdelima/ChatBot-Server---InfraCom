@@ -2,7 +2,7 @@ import socket
 import os
 from tqdm import tqdm
 from threading import Thread
-from time import time
+import time
 
 class RDT():
     def __init__(self, tipo):
@@ -21,6 +21,7 @@ class RDT():
 
             
     def receive_file(self, filename, filesize, address=None) ->str:
+        self.sock.settimeout(5)
         if self.tipo == 'client':
             client_directory = f"client_files/received"
         else:
@@ -52,6 +53,7 @@ class RDT():
             
     
     def send_file(self, filename, address=None) -> int:
+        self.sock.settimeout(5)
         # Obtém o tamanho do arquivo
         filesize = os.path.getsize(filename)
         if self.tipo == "client":
@@ -84,11 +86,16 @@ class RDT():
     
     def wait_for_ack(self):
         while True:
-            data, _ = self.sock.recvfrom(self.BUFFER_SIZE)
-            data = self.unpack(data)
-            if data['seq'] != self.state:
-                self.state = 1-self.state
-                break
+            try:
+                data, _ = self.sock.recvfrom(self.BUFFER_SIZE)
+                data = self.unpack(data)
+                if data['seq'] != self.state:
+                    self.state = 1 - self.state
+                    break
+            except socket.timeout:
+                print("ACK não recebido")
+                continue
+
         
     
     def checksum(self, data):
@@ -128,5 +135,6 @@ class RDT():
         
     def close(self):
         self.sock.close()
+
 
 
