@@ -3,6 +3,7 @@ import os
 from tqdm import tqdm
 from threading import Thread
 import time
+import random
 
 class RDT():
     def __init__(self, tipo):
@@ -30,13 +31,21 @@ class RDT():
         # Caso o diretório não exista, será criado
         if not os.path.exists(client_directory):
             os.makedirs(client_directory)
-
+            
+        # probabilidade de perder um pacote
+        prob_perda = 0.1
+        
         with open(f"{client_directory}/{filename}", 'wb') as f:
             # variável para comparar a quantidade de bytes recebidos
             received = 0
             while received < filesize:
                 # Recebe os dados do servidor
                 data, env = self.sock.recvfrom(self.BUFFER_SIZE)
+                
+                # simula a perda de um pacote
+                if random.uniform(0, 1) < prob_perda:
+                    continue
+                    
                 # Escreve os dados no arquivo
                 data = self.unpack(data)
                 if data['checksum'] == self.checksum(data['payload']):
