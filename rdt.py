@@ -2,6 +2,7 @@ import socket
 import os
 from tqdm import tqdm
 from threading import Thread
+from time import time
 
 class RDT():
     def __init__(self, tipo):
@@ -16,6 +17,7 @@ class RDT():
             self.clients ={}
             self.sock.bind(self.server_address)
             print(f"Server started on {self.server_address}")
+        self.state = 0
 
             
     def receive_file(self, filename, filesize, address=None) ->str:
@@ -33,12 +35,17 @@ class RDT():
             received = 0
             while received < filesize:
                 # Recebe os dados do servidor
-                data, _ = self.sock.recvfrom(self.BUFFER_SIZE)
+                data, env = self.sock.recvfrom(self.BUFFER_SIZE)
                 # Escreve os dados no arquivo
                 data = self.unpack(data)
-                f.write(data)
+                if data['checksum'] == self.checksum(data['payload']):
+                    f.write(data['payload'])
+                    received += len(data['payload'])
+                    data['seq'] = 1- data['seq']
+                    data = str(data)
+                    self.sock.sendto(data.encode(), env)
                 # Incrementa o número de bytes recebidos
-                received += len(data)
+                
             print(f"{filename} received from server")
             f.close()
         return client_directory
@@ -66,7 +73,7 @@ class RDT():
                     n_data = self.pack(data)
                     print(f'{len(data)}=original,  cabecalho={len(n_data)}')
                     self.sock.sendto(n_data, address)
-                    ack = False
+                    self.wait_for_ack()
                     # Atualiza a barra de progresso com o número de bytes enviados
                     pbar.update(len(data))
                     
@@ -74,6 +81,15 @@ class RDT():
             f.close()
 
         return filesize
+    
+    def wait_for_ack(self):
+        while True:
+            data, _ = self.sock.recvfrom(self.BUFFER_SIZE)
+            data = self.unpack(data)
+            if data['seq'] != self.state:
+                self.state = 1-self.state
+                break
+        
     
     def checksum(self, data):
         sum = 0
@@ -96,20 +112,20 @@ class RDT():
     def pack(self, data):
         chcksum = self.checksum(data)
         return str({
-            'seq': 0,
+            'seq': self.state,
             'checksum': chcksum,
             'payload' : data
         }).encode()
     
-    def unpack(self, data):
+    def unpack(self, data) -> dict:
         data = eval(data.decode())
         seq_num = data['seq']
         checksum = data['checksum']
+        print(checksum)
         payload = data['payload']
-        return payload
-
-
-
+        return data
+    
+        
     def close(self):
         self.sock.close()
 
