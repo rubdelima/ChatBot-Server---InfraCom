@@ -19,5 +19,6 @@ if __name__ == '__main__':
             filename = f"{directory}/{filename}"
             # Envia o arquivo de volta para o cliente
             r.send_file(filename, address)
+            
         except socket.timeout:
             pass

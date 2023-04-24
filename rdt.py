@@ -22,7 +22,6 @@ class RDT():
 
             
     def receive_file(self, filename, filesize, address=None) ->str:
-        self.sock.settimeout(5)
         if self.tipo == 'client':
             client_directory = f"client_files/received"
         else:
@@ -40,7 +39,11 @@ class RDT():
             received = 0
             while received < filesize:
                 # Recebe os dados do servidor
-                data, env = self.sock.recvfrom(self.BUFFER_SIZE)
+                self.sock.settimeout(1)
+                try:
+                    data, env = self.sock.recvfrom(self.BUFFER_SIZE)
+                except socket.timeout:
+                    continue
                 
                 # simula a perda de um pacote
                 if random.uniform(0, 1) < prob_perda:
@@ -62,7 +65,6 @@ class RDT():
             
     
     def send_file(self, filename, address=None) -> int:
-        self.sock.settimeout(5)
         # Obtém o tamanho do arquivo
         filesize = os.path.getsize(filename)
         if self.tipo == "client":
@@ -84,7 +86,8 @@ class RDT():
                     n_data = self.pack(data)
                     print(f'{len(data)}=original,  cabecalho={len(n_data)}')
                     self.sock.sendto(n_data, address)
-                    self.wait_for_ack()
+                    self.sock.settimeout(1)
+                    self.wait_for_ack(n_data, address)
                     # Atualiza a barra de progresso com o número de bytes enviados
                     pbar.update(len(data))
                     
@@ -93,7 +96,7 @@ class RDT():
 
         return filesize
     
-    def wait_for_ack(self):
+    def wait_for_ack(self, n_data, address):
         while True:
             try:
                 data, _ = self.sock.recvfrom(self.BUFFER_SIZE)
@@ -102,7 +105,9 @@ class RDT():
                     self.state = 1 - self.state
                     break
             except socket.timeout:
-                print("ACK não recebido")
+                print("ACK não recebido, reenviando pacote")
+                self.sock.sendto(n_data, address)
+
                 continue
 
         
@@ -137,7 +142,6 @@ class RDT():
         data = eval(data.decode())
         seq_num = data['seq']
         checksum = data['checksum']
-        print(checksum)
         payload = data['payload']
         return data
     
