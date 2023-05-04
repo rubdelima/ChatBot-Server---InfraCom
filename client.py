@@ -1,76 +1,78 @@
 import socket
-import os
-from tkinter.filedialog import askopenfilename
-from tqdm import tqdm
+import datetime
+from prompt_toolkit import prompt
+from prompt_toolkit.completion import WordCompleter
 
-BUFFER_SIZE = 1024
+def get_time() -> str:
+    now = datetime.datetime.now()
+    time = now.strftime("%H:%M")
+    return time
 
+# cria o socket UDP
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+# define o IP e a porta do servidor
 server_address = ('localhost', 5000)
-client_address = ('localhost', 0)
 
+# solicita ao usuário o nome e o número da mesa
+user_name = input('Digite seu nome: ')
+table_number = input('Digite o número da mesa: ')
 
-def send_file(sock, filename):
-    # Obtém o tamanho do arquivo
-    filesize = os.path.getsize(filename)
-    data = f"{os.path.basename(filename)}|{filesize}"
-    # Codifica os dados e envia para o servidor
-    sock.sendto(data.encode('utf-8'), server_address)
-    # Recebe uma mensagem de confirmação (ack) do servidor
-    ack, _ = sock.recvfrom(BUFFER_SIZE)
+# envia o comando de conexão e os argumentos para o servidor
+message = f'chefia:{user_name}:{table_number}'
+client_socket.sendto(message.encode(), server_address)
+data, address = client_socket.recvfrom(1024)
+print(f'{get_time()} Server: {data.decode()}')
 
-    with open(filename, 'rb') as f:
-        with tqdm(total=filesize, desc=f'Sending {filename}', unit='B', unit_scale=True) as pbar:
-            while True:
-                # Lê 1024 bytes por vez
-                data = f.read(BUFFER_SIZE)
-                if not data:
-                    break
-                # Envia os bytes para o servidor
-                sock.sendto(data, server_address)
-                # Atualiza a barra de progresso com o número de bytes enviados
-                pbar.update(len(data))
-        print(f"{filename} sent")
-        f.close()
+#lista de comandos e cardápio para autocompletion
+cardapio = WordCompleter([])
+comandos = WordCompleter(['chefia', 'levantar da mesa', 'pagar', 'pedido',
+                          'conta da mesa', 'conta individual', 'cardapio'])
 
-    return filesize
-
-
-def receive_file(sock, filename, filesize):
-    client_directory = f"client_files/received"
+while True:
     
-    # Caso o diretório não exista, será criado
-    if not os.path.exists(client_directory):
-        os.makedirs(client_directory)
-
-    with open(f"{client_directory}/{filename}", 'wb') as f:
-        # variável para comparar a quantidade de bytes recebidos
-        received = 0
-        while received < filesize:
-            # Recebe os dados do servidor
-            data, _ = sock.recvfrom(BUFFER_SIZE)
-            # Escreve os dados no arquivo
-            f.write(data)
-            # Incrementa o número de bytes recebidos
-            received += len(data)
-        print(f"{filename} received from server")
-        f.close()
-
-
-def main():
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        # Vincula o socket com o endereço de destino
-        sock.bind(client_address)
-        print(f"Client started on {sock.getsockname()}")
-
-        # abre uma janela de para selecionar o arquivo a ser enviado
-        filename = askopenfilename()
-
-        # envia o arquivo para o servidor e obtém o tamanho do arquivo
-        filesize = send_file(sock, filename)
+    command = prompt(f'{get_time()} {user_name}> ', completer=comandos)
+    client_socket.sendto(command.encode(), server_address)
+    data, address = client_socket.recvfrom(1024)
+    
+    if command == 'sair':
+        print(f'{get_time()} Server: {data.decode()}')
+        if data.decode() == 'Ok, você pode sair.':
+            print('Desconectado com sucesso')
+            client_socket.close()
+            break
+    elif command == 'cardapio':
+        cardapio_data = data.decode().split(',')
+        cardapio = WordCompleter(cardapio_data)
+        print(f'{get_time()} Server: o nosso cardápio tem:')
+        [print(i) for i in cardapio_data]
+    
+    elif command == 'fatura mesa':
+        print(f'{get_time()} Server: os valores da cada um da mesa é')
+        fatura_mesa = data.decode().split(',')
+        [print(i) for i in fatura_mesa]
         
-        # recebe o arquivo do servidor
-        receive_file(sock, os.path.basename(filename), filesize)
+    elif command == 'pedido':
+        print(f'{get_time()} Server: {data.decode()}')
+        while True:
+            try:
+                command = int(input(f'{get_time()} {user_name}> '))
+                client_socket.sendto(str(command).encode(), server_address)
+                break
+            except ValueError:
+                print("Por favor digite um valor inteiro")
+                
+        counter = 0
+        while True: # "do - while de python"
+            data, address = client_socket.recvfrom(1024)
+            resposta = data.decode()
+            print(f'{get_time()} Server: {resposta}')
+            if 'registrado' in resposta: counter += 1
+            if not (counter < command): break
+            pedido = prompt(f'{get_time()} {user_name}> ', completer=cardapio).split()[0]
+            client_socket.sendto(str(pedido).encode(), server_address)
+        
+            
+    else:
+        print(f'{get_time()} Server: {data.decode()}')
 
-
-if __name__ == '__main__':
-    main()

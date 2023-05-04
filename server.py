@@ -1,88 +1,123 @@
 import socket
-import os
-from threading import Thread
-from tqdm import tqdm
+import datetime
+from user import User
 
-# Define o tamanho do buffer utilizado na transferência de dados
-BUFFER_SIZE = 1024
+# função para obter a hora atual
+def get_time() -> str:
+    now = datetime.datetime.now()
+    time = now.strftime("%H:%M")
+    return time
 
-# Define o endereço do servidor
+# cria o socket UDP
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+# define o IP e a porta do servidor
 server_address = ('localhost', 5000)
 
-# Cria um dicionário para armazenar a identificação de cada cliente conectado
+# faz o bind do socket com o IP e a porta do servidor
+server_socket.bind(server_address)
+
+print(get_time() + ' Servidor UDP iniciado.')
+
+# cria um dicionário para armazenar os clientes conectados
+cardapio = {'Refrigerante': 5, 'Sushi': 10,'Carne-de-Sol': 20}
+lista_opcoes = ['sair', 'cardapio', 'pedido', 'pagar', 'conta individual', 'conta da mesa']
 clients = {}
+mesas = {}
 
-# Cria uma lista para armazenar as threads criada (não utilizado na primeira entrega)
-thread_list = []
+thread_run = True
 
-# Função que recebe um arquivo enviado por um cliente e o salva no diretório do cliente correspondente
-def receive_file(sock, address, filename, filesize):
-    # variavel para comparar a quantidade de bytes recebidos
-    received = 0
-    
-    client_directory = f"server_files/{clients[address]}"
-    
-    # Cria o diretório caso ainda não exista
-    if not os.path.exists(client_directory):
-        os.makedirs(client_directory)
-    with open(f"{client_directory}/{filename}", 'wb') as f:
-        while received < filesize:
-            data, _ = sock.recvfrom(BUFFER_SIZE)
-            f.write(data)
-            received += len(data)
-        print(f"{filename} received from {address}")
-        f.close()
+def run_command(command, args, client_address, data):
+    match(command):
+            case 'chefia':
+                if client_address not in clients.keys():
+                    clients[client_address] = User(client_address, args)
+                    print(f'{get_time()} Cliente conectado: {args[0]} (mesa {args[1]})')
+                    if args[1] not in mesas.keys():
+                        mesas[args[1]] = [clients[client_address]]
+                    else:
+                        mesas[args[1]].append(clients[client_address])
+                
+                server_socket.sendto(f'O que deseja fazer?{lista_opcoes}'.encode(), client_address)
+                
+            case 'sair':
+                # remove o cliente do dicionário de clientes se o valor gasto for igual ao valor pago
+                if client_address in clients:
+                    client = clients[client_address]
+                    if client.valor_pago == client.valor_gasto:
+                        mesas[client.mesa].remove(clients[client_address])
+                        clients.pop(client_address)
+                        print(f'{get_time()} Cliente desconectado: {client.nome} (mesa {client.mesa})')
+                        server_socket.sendto('Ok, você pode sair.'.encode(), client_address)
+                    else:
+                        server_socket.sendto('Você não pode sair, ainda tem uma fatura pendente.'.encode(), client_address)
 
-    return client_directory
+            case 'cardapio':
+                # envia ao cliente o cardápio
+                cardapio_str = ','.join([f'{k} ({v} reais)' for k,v in cardapio.items()])
+                server_socket.sendto(cardapio_str.encode(), client_address)
 
+            case 'conta individual':
+                # envia ao cliente a lista de pedidos e o valor total da fatura
+                if client_address in clients:
+                    server_socket.sendto((clients[client_address].get_fatura()).encode(), client_address)
 
-# Função que envia o arquivo de volta para o cliente
-def send_file(sock, filename, address):
-    filesize = os.path.getsize(filename)
+            case 'pagar':
+                # atualiza o valor pago pelo cliente
+                if client_address in clients:
+                    clients[client_address].pay()
+                    server_socket.sendto('Obrigado pelo pagamento.'.encode(), client_address)
 
-    with open(filename, 'rb') as f:
-        with tqdm(total=filesize, desc=f'Sending {os.path.basename(filename)}', unit='B', unit_scale=True) as pbar:
-            while True:
-                data = f.read(BUFFER_SIZE)
-                if not data:
-                    break
+            case 'pedido':
+                # recebe a mensagem perguntando quantos pedidos o cliente deseja fazer
+                server_socket.sendto('Quantos pedidos deseja fazer?'.encode(), client_address)
+                clients[client_address].fase = 'pedido1'
+                
+            case 'conta da mesa':
+                message = ','.join([f'{i.nome} ({i.valor_gasto-i.valor_pago} reais)' for i in mesas[clients[client_address].mesa]])
+                server_socket.sendto(message.encode(), client_address)
 
-                sock.sendto(data, address)
-                pbar.update(len(data))
-
-        print(f"{os.path.basename(filename)} sent")
-        f.close()
+            case _:
+                match(clients[client_address].fase):
+                    case 'pedido1':
+                        try:
+                            clients[client_address].novo_pedido_qnt = int(data.decode())
+                            server_socket.sendto('Digite o nome do pedido:'.encode(), client_address)
+                            clients[client_address].fase = 'pedido2'
+                        except:
+                            server_socket.sendto('Informe um valor válido'.encode(), client_address)
+                    
+                    case 'pedido2':
+                        nome_pedido = data.decode()
+                        if nome_pedido in cardapio:
+                            clients[client_address].novo_pedido.append(nome_pedido)
+                            clients[client_address].valor_gasto += cardapio[nome_pedido]
+                            pedidos_restantes = clients[client_address].novo_pedido_qnt - len(clients[client_address].novo_pedido)
+                            if pedidos_restantes >0:
+                                mensagem = f'Pedido de {nome_pedido} registrado, você têm {pedidos_restantes} pedidos.'
+                            else:
+                                mensagem = f'Pedido de {nome_pedido} registrado, o total é de {sum([cardapio[i] for i in clients[client_address].novo_pedido])}'
+                                clients[client_address].atualizar_pedidos()
+                            server_socket.sendto(mensagem.encode(), client_address)
+                        else:
+                            server_socket.sendto('Pedido inválido.'.encode(), client_address)
+                        
+                    case _:
+                        server_socket.sendto('Código inválido'.encode(), client_address)
+                # operação inválida
 
 
 if __name__ == '__main__':
-    # Cria um socket UDP
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        # Vincula o socket com o endereço do servidor
-        sock.bind(server_address)
-        print(f"Server started on {server_address}")
+    while True:
+        data, client_address = server_socket.recvfrom(1024)
+        message = data.decode()
+        parts = message.split(':')
+        command = parts[0]
+        args = parts[1:]
+        
+        run_command(command, args, client_address, data)
+        
+        for i in clients.keys():
+            print(clients[i])
 
-        # Entra em um loop para receber arquivos de clientes
-        while True:
-            # Recebe dados enviados por um cliente e o endereço do cliente que enviou os dados
-            data, address = sock.recvfrom(BUFFER_SIZE)
 
-            # Verifica se o cliente que enviou os dados já está registrado no dicionário clients
-            if address not in clients:
-                clients[address] = len(clients) + 1
-
-            # Extrai o nome do arquivo e o tamanho do arquivo dos dados recebidos
-            filename, filesize = data.decode('utf-8').split('|')
-            filesize = int(filesize)
-
-            # Envia uma mensagem de confirmação ('ack') para o cliente
-            sock.sendto('ack'.encode('utf-8'), address)
-
-            # Cria uma nova thread para receber o arquivo do cliente e adiciona a thread na lista (não usado nessa entrega)
-            thread_list.append(Thread(target=receive_file, args=(sock, address, filename, filesize)))
-
-            # Recebe o arquivo enviado pelo cliente e armazena o caminho do arquivo no diretório do cliente
-            directory = receive_file(sock, address, filename, filesize)
-            filename = f"{directory}/{filename}"
-
-            # Envia o arquivo de volta para o cliente
-            send_file(sock, filename, address)
