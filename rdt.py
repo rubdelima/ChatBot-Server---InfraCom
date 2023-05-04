@@ -7,6 +7,7 @@ class RDT():
     def __init__(self, tipo=None):
         # cria o socket UDP
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        print(self.sock)
         # define o IP e a porta do servidor
         self.server_address = ('localhost', 5000)
         if tipo == 'server':
@@ -15,7 +16,7 @@ class RDT():
         self.conections = {}
         self.estado = None
     
-    def checksum(data):
+    def checksum(self, data):
         sum = 0
         data = str(data)
         for i in range(0,len(data),2):
@@ -42,10 +43,9 @@ class RDT():
     def unpack_pkt(self, packet)->dict:
         # Desempacotar o pacote
         tamanho_mensagem, num1, num2, num3, mensagem = struct.unpack('>i3i1008s', packet)
-
         # Decodificar a string de volta para o formato de string original
         mensagem = mensagem[:tamanho_mensagem].decode()
-        dicionario = {'ack' : num1, 'seq' : num2, 'checksum' : num3, 'messagem' : mensagem, 'mensagem_size' : tamanho_mensagem}
+        dicionario = {'ack' : num1, 'seq' : num2, 'checksum' : num3, 'mensagem' : mensagem, 'mensagem_size' : tamanho_mensagem}
         return dicionario
     
     def enviar_pacote(self, pacote, destino):
@@ -56,7 +56,7 @@ class RDT():
                 break #encerra
             
     
-    def emitir(self, mensagem, destino):
+    def emitir(self, mensagem, destino=('127.0.0.1', 5000)):
         # Bloco 1 - Enviar ACK
         if destino not in self.conections.values(): # Se o destino não está nas conexões
             self.conections[destino] = {'ack' : 0, 'seq' : 0, 'expec_seq' : 0} # ponto na minha lista de conexões
@@ -81,10 +81,11 @@ class RDT():
             data = self.unpack_pkt(data) # desempacoto o pacote
             # variáveis de confirmação
             v1 = (rcv_address == destino) # se for uma mensagem do destino que eu espero
-            v2 = (self.checksum(data['menssagem']) == data['cheksum']) # se o cheksum estiver correto (não está corrompido)
+            v2 = (self.checksum(data['mensagem']) == data['checksum']) # se o checksum estiver correto (não está corrompido)
             v3 = self.conections[destino]['expec_seq'] == data['ack'] # se o ack for para a sequência que eu espero
             if v1 and v2 and v3:
                 self.estado = 'sending message'
+                #enviar.join()
                 break
         
         # Bloco 3 - Atualizar os dados e enviar a mensagem
@@ -111,10 +112,11 @@ class RDT():
             data = self.unpack_pkt(data) # desempacoto o pacote
             # variáveis de confirmação
             v1 = (rcv_address == destino) # se for uma mensagem do destino que eu espero
-            v2 = (self.checksum(data['menssagem']) == data['cheksum']) # se o cheksum estiver correto (não está corrompido)
+            v2 = (self.checksum(data['mensagem']) == data['checksum']) # se o checksum estiver correto (não está corrompido)
             v3 = self.conections[destino]['expec_seq'] == data['ack'] # se o ack for para a sequência que eu espero
             if v1 and v2 and v3:
                 self.estado = 'finished'
+                #enviar.join()
                 break
         
         self.conections[destino]['seq'] = data['ack']
@@ -128,12 +130,12 @@ class RDT():
             data = self.unpack_pkt(data)
             self.conections[rcv_address] = {'ack' : data['seq'], 'seq' : data['ack'], 'expec_seq' : data['ack']}
         
-        self.conections['ack'] +=1
+        self.conections[rcv_address]['ack'] += 1
         
         ack_resp_pck = self.create_pkt(
             ack = self.conections[rcv_address]['ack'],
             seq = self.conections[rcv_address]['seq'],
-            msg= "o"
+            msg= "1"
         )
         
         self.estado = "waiting for message"
@@ -148,22 +150,22 @@ class RDT():
             data = self.unpack_pkt(data) # desempacoto o pacote
             # variáveis de confirmação
             v1 = (rcv_address == rcv_address_n) # se for uma mensagem do destino que eu espero
-            v2 = (self.checksum(data['menssagem']) == data['cheksum']) # se o cheksum estiver correto (não está corrompido)
+            v2 = (self.checksum(data['mensagem']) == data['checksum']) # se o checksum estiver correto (não está corrompido)
             v3 = self.conections[rcv_address]['expec_seq'] == data['ack'] # se o ack for para a sequência que eu espero
             if v1 and v2 and v3:
                 self.estado = 'finished'
+                #enviar.join()
                 break
         
         self.conections[rcv_address]['seq'] = data['ack']
-        self.conections[rcv_address]['ack'] = data['seq']
+        self.conections[rcv_address]['ack'] = data['seq'] +  len(data['mensagem'])
         self.conections[rcv_address]['expec_seq'] += len(data['mensagem'])
         
         msg_resp_pck = self.create_pkt(
             ack = self.conections[rcv_address]['ack'],
             seq = self.conections[rcv_address]['seq'],
-            msg= "o"
+            msg= "2"
         )
         self.enviar_pacote(msg_resp_pck, rcv_address)      
         
         return data['mensagem'], rcv_address
-        
