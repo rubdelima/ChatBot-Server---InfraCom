@@ -1,6 +1,7 @@
 import socket
 import datetime
 from user import User
+from rdt import RDT
 
 # função para obter a hora atual
 def get_time() -> str:
@@ -18,6 +19,8 @@ server_address = ('localhost', 5000)
 server_socket.bind(server_address)
 
 print(get_time() + ' Servidor UDP iniciado.')
+# Criando a classe com RDT
+serv = RDT(server_socket)
 
 # cria um dicionário para armazenar os clientes conectados
 cardapio = {'Refrigerante': 5, 'Sushi': 10,'Carne-de-Sol': 20}
@@ -38,7 +41,7 @@ def run_command(command, args, client_address, data):
                     else:
                         mesas[args[1]].append(clients[client_address])
                 
-                server_socket.sendto(f'O que deseja fazer?{lista_opcoes}'.encode(), client_address)
+                serv.enviar(f'O que deseja fazer?{lista_opcoes}', client_address)
                 
             case 'sair':
                 # remove o cliente do dicionário de clientes se o valor gasto for igual ao valor pago
@@ -48,47 +51,47 @@ def run_command(command, args, client_address, data):
                         mesas[client.mesa].remove(clients[client_address])
                         clients.pop(client_address)
                         print(f'{get_time()} Cliente desconectado: {client.nome} (mesa {client.mesa})')
-                        server_socket.sendto('Ok, você pode sair.'.encode(), client_address)
+                        serv.enviar('Ok, você pode sair.', client_address)
                     else:
-                        server_socket.sendto('Você não pode sair, ainda tem uma fatura pendente.'.encode(), client_address)
+                        serv.enviar('Você não pode sair, ainda tem uma fatura pendente.', client_address)
 
             case 'cardapio':
                 # envia ao cliente o cardápio
                 cardapio_str = ','.join([f'{k} ({v} reais)' for k,v in cardapio.items()])
-                server_socket.sendto(cardapio_str.encode(), client_address)
+                serv.enviar(cardapio_str, client_address)
 
             case 'conta individual':
                 # envia ao cliente a lista de pedidos e o valor total da fatura
                 if client_address in clients:
-                    server_socket.sendto((clients[client_address].get_fatura()).encode(), client_address)
+                    serv.enviar((clients[client_address].get_fatura()), client_address)
 
             case 'pagar':
                 # atualiza o valor pago pelo cliente
                 if client_address in clients:
                     clients[client_address].pay()
-                    server_socket.sendto('Obrigado pelo pagamento.'.encode(), client_address)
+                    serv.enviar('Obrigado pelo pagamento.', client_address)
 
             case 'pedido':
                 # recebe a mensagem perguntando quantos pedidos o cliente deseja fazer
-                server_socket.sendto('Quantos pedidos deseja fazer?'.encode(), client_address)
+                serv.enviar('Quantos pedidos deseja fazer?', client_address)
                 clients[client_address].fase = 'pedido1'
                 
             case 'conta da mesa':
                 message = ','.join([f'{i.nome} ({i.valor_gasto-i.valor_pago} reais)' for i in mesas[clients[client_address].mesa]])
-                server_socket.sendto(message.encode(), client_address)
+                serv.enviar(message, client_address)
 
             case _:
                 match(clients[client_address].fase):
                     case 'pedido1':
                         try:
-                            clients[client_address].novo_pedido_qnt = int(data.decode())
-                            server_socket.sendto('Digite o nome do pedido:'.encode(), client_address)
+                            clients[client_address].novo_pedido_qnt = int(data)
+                            serv.enviar('Digite o nome do pedido:', client_address)
                             clients[client_address].fase = 'pedido2'
                         except:
-                            server_socket.sendto('Informe um valor válido'.encode(), client_address)
+                            serv.enviar('Informe um valor válido', client_address)
                     
                     case 'pedido2':
-                        nome_pedido = data.decode()
+                        nome_pedido = data
                         if nome_pedido in cardapio:
                             clients[client_address].novo_pedido.append(nome_pedido)
                             clients[client_address].valor_gasto += cardapio[nome_pedido]
@@ -98,19 +101,20 @@ def run_command(command, args, client_address, data):
                             else:
                                 mensagem = f'Pedido de {nome_pedido} registrado, o total é de {sum([cardapio[i] for i in clients[client_address].novo_pedido])}'
                                 clients[client_address].atualizar_pedidos()
-                            server_socket.sendto(mensagem.encode(), client_address)
+                            serv.enviar(mensagem, client_address)
                         else:
-                            server_socket.sendto('Pedido inválido.'.encode(), client_address)
+                            serv.enviar('Pedido inválido.', client_address)
                         
                     case _:
-                        server_socket.sendto('Código inválido'.encode(), client_address)
+                        serv.enviar('Código inválido', client_address)
                 # operação inválida
 
 
 if __name__ == '__main__':
     while True:
-        data, client_address = server_socket.recvfrom(1024)
-        message = data.decode()
+        data, client_address = serv.receber()
+        print(data)
+        message = data
         parts = message.split(':')
         command = parts[0]
         args = parts[1:]

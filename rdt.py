@@ -4,15 +4,8 @@ from threading import Thread
 import time
 
 class RDT():
-    def __init__(self, tipo=None):
-        # cria o socket UDP
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        print(self.sock)
-        # define o IP e a porta do servidor
-        self.server_address = ('localhost', 5000)
-        if tipo == 'server':
-            # faz o bind do socket com o IP e a porta do servidor
-            self.sock.bind(self.server_address)
+    def __init__(self, sock):
+        self.sock = sock
         self.conections = {}
         self.estado = None
     
@@ -47,125 +40,116 @@ class RDT():
         mensagem = mensagem[:tamanho_mensagem].decode()
         dicionario = {'ack' : num1, 'seq' : num2, 'checksum' : num3, 'mensagem' : mensagem, 'mensagem_size' : tamanho_mensagem}
         return dicionario
-    
-    def enviar_pacote(self, pacote, destino):
-        while  True: # do while loop
-            self.sock.sendto(pacote, destino) # envia o pacote
-            time.sleep(5) #aguarda 5 segundos
-            if ("waiting" not in self.estado): # se o estado nao for mais de esperar
-                break #encerra
+
+    def wait_for_response(self, endereco)->dict:
+        while True:
+            data, rcv_address = self.sock.recvfrom(1024) # recebo um pacote
+            data = self.unpack_pkt(data) # desempacoto o pacote
+            #print(f"Pacote recebido de {rcv_address}: ACK: {data['ack']} SEQ: {data['seq']}")
+            # variáveis de confirmação
+            v1 = (rcv_address == endereco) # se for uma mensagem do destino que eu espero
+            v2 = (self.checksum(data['mensagem']) == data['checksum']) # se o checksum estiver correto (não está corrompido)
+            v3 = self.conections[endereco]['next_seq'] == data['ack'] # se o ack for para a sequência que eu espero
+            if v1 and v2 and v3:
+                return data
             
-    
-    def emitir(self, mensagem, destino=('127.0.0.1', 5000)):
-        # Bloco 1 - Enviar ACK
-        if destino not in self.conections.values(): # Se o destino não está nas conexões
-            self.conections[destino] = {'ack' : 0, 'seq' : 0, 'expec_seq' : 0} # ponto na minha lista de conexões
+    def enviar(self, msg, destino):
+        msg = str(msg)
+        if destino not in self.conections.keys(): # Se o destino não está nas conexões
+            self.conections[destino] = {
+                'snd_base' : 0, 'next_seq' : 0, 'rcv_base' : 0
+                } # ponto na minha lista de conexões
         
-        self.conections[destino]['expec_seq'] += 1 # Espero receber +1 na sequência
+        # Bloco 1 - Enviar ACK
         
         ack_pck = self.create_pkt(
-            ack = self.conections[destino]['ack'],
-            seq = self.conections[destino]['seq'],
+            ack = self.conections[destino]['rcv_base'],
+            seq = self.conections[destino]['snd_base'],
             msg= "ACK"
         )
         
-        self.estado = "waiting for ack confirmation"
+        self.sock.sendto(ack_pck,destino) # envio o pacote
         
-        enviar = Thread(target=self.enviar_pacote, args = (ack_pck, destino))
-        enviar.start()
+        self.conections[destino]['next_seq'] += 1
         
-        # Bloco 2 - Esperar confirmação do ACK
+        # Bloco 2 - Esperar Confirmaçao
+        data = self.wait_for_response(destino)
+        self.conections[destino]['snd_base'] = data['ack']
+        self.conections[destino]['rcv_base'] += 1
         
-        while True:
-            data, rcv_address = self.sock.recvfrom(1024) # recebo um pacote
-            data = self.unpack_pkt(data) # desempacoto o pacote
-            # variáveis de confirmação
-            v1 = (rcv_address == destino) # se for uma mensagem do destino que eu espero
-            v2 = (self.checksum(data['mensagem']) == data['checksum']) # se o checksum estiver correto (não está corrompido)
-            v3 = self.conections[destino]['expec_seq'] == data['ack'] # se o ack for para a sequência que eu espero
-            if v1 and v2 and v3:
-                self.estado = 'sending message'
-                #enviar.join()
-                break
-        
-        # Bloco 3 - Atualizar os dados e enviar a mensagem
-         
-        self.conections[destino]['seq'] = data['ack']
-        self.conections[destino]['ack'] = data['seq']
-        self.conections[destino]['expec_seq'] += len(mensagem)
-        
+        # Bloco 3 - Enviar Mensagem
         msg_pck  = self.create_pkt(
-            ack = self.conections[destino]['ack'],
-            seq = self.conections[destino]['seq'],
-            msg= mensagem
+            ack = self.conections[destino]['rcv_base'],
+            seq = self.conections[destino]['snd_base'],
+            msg= msg
         )
+        self.sock.sendto(msg_pck, destino)
+        self.conections[destino]['next_seq'] += len(msg)
         
-        self.estado = "waiting for message confirmation"
+        # Bloco 4 - Aguardar Confirmação e Encerrar
+        data = self.wait_for_response(destino)
+        self.conections[destino]['snd_base'] = data['ack']
+        self.conections[destino]['rcv_base'] += 1
         
-        enviar = Thread(target=self.enviar_pacote, args = (msg_pck, destino))
-        enviar.start()
-        
-        # Bloco 4 - Esperar confirmaçao do recebimento da Mensagem
-        
-        while True:
-            data, rcv_address = self.sock.recvfrom(1024) # recebo um pacote
-            data = self.unpack_pkt(data) # desempacoto o pacote
-            # variáveis de confirmação
-            v1 = (rcv_address == destino) # se for uma mensagem do destino que eu espero
-            v2 = (self.checksum(data['mensagem']) == data['checksum']) # se o checksum estiver correto (não está corrompido)
-            v3 = self.conections[destino]['expec_seq'] == data['ack'] # se o ack for para a sequência que eu espero
-            if v1 and v2 and v3:
-                self.estado = 'finished'
-                #enviar.join()
-                break
-        
-        self.conections[destino]['seq'] = data['ack']
-        self.conections[destino]['ack'] = data['seq']
-                
+        last_pck  = self.create_pkt(
+            ack = self.conections[destino]['rcv_base'],
+            seq = self.conections[destino]['snd_base'],
+            msg= msg
+        )
+    
+        self.sock.sendto(last_pck, destino)
+        '''
+        print('send_base: {}, next_seq: {}, rcv_base: {}'.format(
+                *self.conections[destino].values()))
+        '''
     
     def receber(self):
-        # Bloco 1 - Receber ACK e reenviar
-        data, rcv_address = self.sock.recvfrom(1024) # recebo um pacote
-        if rcv_address not in self.conections.keys(): # se não tiver na tabela de conexões
-            data = self.unpack_pkt(data)
-            self.conections[rcv_address] = {'ack' : data['seq'], 'seq' : data['ack'], 'expec_seq' : data['ack']}
-        
-        self.conections[rcv_address]['ack'] += 1
-        
-        ack_resp_pck = self.create_pkt(
-            ack = self.conections[rcv_address]['ack'],
-            seq = self.conections[rcv_address]['seq'],
-            msg= "1"
-        )
-        
-        self.estado = "waiting for message"
-        
-        enviar = Thread(target=self.enviar_pacote, args = (ack_resp_pck, rcv_address))
-        enviar.start()
-        
-        # Bloco 2 - Receber mensagem e confirmar
-        
+        # Bloco 1 - Receber o ACK e enviar confirmação
         while True:
-            data, rcv_address_n = self.sock.recvfrom(1024) # recebo um pacote
+            data, rcv_address = self.sock.recvfrom(1024) # recebo um pacote
             data = self.unpack_pkt(data) # desempacoto o pacote
-            # variáveis de confirmação
-            v1 = (rcv_address == rcv_address_n) # se for uma mensagem do destino que eu espero
-            v2 = (self.checksum(data['mensagem']) == data['checksum']) # se o checksum estiver correto (não está corrompido)
-            v3 = self.conections[rcv_address]['expec_seq'] == data['ack'] # se o ack for para a sequência que eu espero
-            if v1 and v2 and v3:
-                self.estado = 'finished'
-                #enviar.join()
+            if data['mensagem'] == 'ACK':
                 break
         
-        self.conections[rcv_address]['seq'] = data['ack']
-        self.conections[rcv_address]['ack'] = data['seq'] +  len(data['mensagem'])
-        self.conections[rcv_address]['expec_seq'] += len(data['mensagem'])
+        if rcv_address not in self.conections.keys():
+            self.conections[rcv_address] = {
+                'snd_base': 0, 'next_seq': 0, 'rcv_base' : 0
+            }
         
-        msg_resp_pck = self.create_pkt(
-            ack = self.conections[rcv_address]['ack'],
-            seq = self.conections[rcv_address]['seq'],
-            msg= "2"
+        self.conections[rcv_address]['rcv_base'] += 1
+
+        ack_resp_pck = self.create_pkt(
+            ack = self.conections[rcv_address]['rcv_base'],
+            seq = self.conections[rcv_address]['next_seq'],
+            msg = '1'
         )
-        self.enviar_pacote(msg_resp_pck, rcv_address)      
         
-        return data['mensagem'], rcv_address
+        self.sock.sendto(ack_resp_pck, rcv_address)
+        self.conections[rcv_address]['next_seq'] += 1
+        
+        # Bloco 2 - Receber Pacote e Enviar Confirmação
+        
+        data = self.wait_for_response(rcv_address)
+                
+        self.conections[rcv_address]['snd_base'] = data['ack']
+        self.conections[rcv_address]['rcv_base'] += len(data['mensagem'])
+        
+        mensagem = data['mensagem']
+        
+        msg_conf_pck = self.create_pkt(
+            ack = self.conections[rcv_address]['rcv_base'],
+            seq = self.conections[rcv_address]['snd_base'],
+            msg= '2'
+        )
+        self.sock.sendto(msg_conf_pck, rcv_address)
+        self.conections[rcv_address]['next_seq'] +=  1
+        
+        # Bloco 3 - Confirmar Recibo
+        data = self.wait_for_response(rcv_address)
+        
+        self.conections[rcv_address]['snd_base'] = data['ack']
+        '''
+        print('send_base: {}, next_seq: {}, rcv_base: {}'.format(
+                *self.conections[rcv_address].values()))
+        '''
+        return mensagem, rcv_address
