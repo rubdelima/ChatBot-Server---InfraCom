@@ -45,7 +45,7 @@ class User():
                         break
                 if valor == 0:
                     break
-            self.valor_pago = valor_inicial - valor
+            self.valor_pago += valor_inicial - valor
             return valor
                 
 

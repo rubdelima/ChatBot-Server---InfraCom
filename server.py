@@ -170,7 +170,7 @@ def run_command(command, args, client_address, data)->bool:
                                 
                                 ja_pagos = 1
                                 #enquanto tiver troco pra distribuir e gente na mesa para receber e tiver mais troco que pessoa
-                                while (resto > 0 and mesa_len>0 and resto>=mesa_len):
+                                while (resto > 0 and mesa_len>0 and resto>=mesa_len and (mesa_len-ja_pagos)>0):
                                     print(f'{resto // (mesa_len-ja_pagos)} = {resto} // ({mesa_len-ja_pagos})')
                                     dist = resto // (mesa_len-ja_pagos)
                                     print(f'{dist}')
