@@ -1,7 +1,8 @@
 import socket
 import datetime
 from user import User
-from rdt import RDT
+from rdt import Server
+import json
 
 # função para obter a hora atual
 def get_time() -> str:
@@ -20,18 +21,60 @@ server_socket.bind(server_address)
 
 print(get_time() + ' Servidor UDP iniciado.')
 # Criando a classe com RDT
-serv = RDT(server_socket)
+serv = Server(server_socket)
 
 # cria um dicionário para armazenar os clientes conectados
-cardapio = {'Refrigerante': 5, 'Sushi': 10,'Carne-de-Sol': 20}
+cardapio = {'Pastel-de-Frango': 5, 'Pastel-de-Queijo': 5,'Pastel-de-Catupiry': 5,
+            'Pizza-Mussarela-P': 7, 'Pizza-Mussarela-M' : 15 ,'Pizza-Mussarela-G' : 30,
+            'Pizza-Portugusa-P': 7, 'Pizza-Portuguesa-M' : 15 ,'Pizza-Portuguesa-G' : 30,
+            'Pizza-Calabresa-P': 8, 'Pizza-Calabresa-M' : 18 ,'Pizza-Calabresa-G' : 35,
+            'Batata-Simples' : 5, 'Batata-Media': 7, 'Ultimate-Batata' : 15,
+            'Hamburguer-Simples' : 10, 'Hamburguer-Orion': 12, 'Ultimate-Hamburguer': 15,
+            'Coca-Cola-Lata' : 5, 'Coca-Cola-1L' : 10, 'Fanta-Lata' : 5, 'Fanta-1L' : 10,
+            'Heineken' : 5, 'Budweiser' : 5, 'Stela' : 5, 'Smirnoff' : 5
+        }
 lista_opcoes = ['sair', 'cardapio', 'pedido', 'pagar', 'conta individual', 'conta da mesa']
 clients = {}
 mesas = {}
+lista_pedidos = []
+clients_relatorio = []
 
-thread_run = True
-
-def run_command(command, args, client_address, data):
+def get_relatorio()->None:
+    with open('relatorio.txt', 'w') as f:
+        print(70*"-", file=f)
+        a = 'Relatório de Vendas'
+        b = ' '*(34-(len(a)//2))
+        print('|'+b+a+b+'|', file=f)
+        print(70*"-", file=f)
+        print("| {:<3}| {:<25} | {:<5} | {:<18} | {:<4} |".format(
+            'Nº', 'Item', 'Valor', 'Cliente', 'Mesa'), file = f)
+        total = 0
+        for i,j in enumerate(lista_pedidos):
+            print("| {:<3}| {:<25} | {:<5} | {:<18} | {:<4} |".format(i+1, *j.values()), file=f)
+            total += j['valor']
+        print('-'*70, file=f)
+        a = f'Total: {total}'
+        b = ' '*(34-(len(a)//2))
+        print('|'+b+a+b+'|', file=f)
+        print('-'*70, file=f)
+        
+    with open('relatorio.json', 'w') as saida:
+        json.dump(clients_relatorio, saida)
+        
+        
+def run_command(command, args, client_address, data)->bool:
     match(command):
+            case 'fechar_server':
+                serv.enviar('Todos pagando suas contas, o restaurante fechou', client_address)
+                for client_s in clients.keys():
+                    clients[client_s].pay()
+                    client = clients[client_s]
+                    clients_relatorio.append(
+                        {'nome': client.nome, 'mesa': client.mesa, 'conta individual': client.valor_gasto,
+                         'socket': client.address, 'pedidos' : client.pedidos})
+                    print(f'{get_time()} Cliente desconectado: {client.nome} (mesa {client.mesa})')
+                return False
+            
             case 'chefia':
                 if client_address not in clients.keys():
                     clients[client_address] = User(client_address, args)
@@ -49,7 +92,9 @@ def run_command(command, args, client_address, data):
                     client = clients[client_address]
                     if client.valor_pago == client.valor_gasto:
                         mesas[client.mesa].remove(clients[client_address])
-                        clients.pop(client_address)
+                        clients_relatorio.append(
+                            {'nome': client.nome, 'mesa': client.mesa, 'conta individual': client.valor_gasto,
+                             'socket': client.address, 'pedidos' : client.pedidos})
                         print(f'{get_time()} Cliente desconectado: {client.nome} (mesa {client.mesa})')
                         serv.enviar('Ok, você pode sair.', client_address)
                     else:
@@ -57,8 +102,7 @@ def run_command(command, args, client_address, data):
 
             case 'cardapio':
                 # envia ao cliente o cardápio
-                cardapio_str = ','.join([f'{k} ({v} reais)' for k,v in cardapio.items()])
-                serv.enviar(cardapio_str, client_address)
+                serv.enviar(str(cardapio), client_address)
 
             case 'conta individual':
                 # envia ao cliente a lista de pedidos e o valor total da fatura
@@ -68,8 +112,8 @@ def run_command(command, args, client_address, data):
             case 'pagar':
                 # atualiza o valor pago pelo cliente
                 if client_address in clients:
-                    clients[client_address].pay()
-                    serv.enviar('Obrigado pelo pagamento.', client_address)
+                    clients[client_address].fase = 'pagamento'
+                    serv.enviar('Quanto deseja pagar?', client_address)
 
             case 'pedido':
                 # recebe a mensagem perguntando quantos pedidos o cliente deseja fazer
@@ -77,8 +121,8 @@ def run_command(command, args, client_address, data):
                 clients[client_address].fase = 'pedido1'
                 
             case 'conta da mesa':
-                message = ','.join([f'{i.nome} ({i.valor_gasto-i.valor_pago} reais)' for i in mesas[clients[client_address].mesa]])
-                serv.enviar(message, client_address)
+                message = [(i.nome, i.valor_gasto, i.valor_pago) for i in mesas[clients[client_address].mesa]]
+                serv.enviar(str(message), client_address)
 
             case _:
                 match(clients[client_address].fase):
@@ -92,7 +136,13 @@ def run_command(command, args, client_address, data):
                     
                     case 'pedido2':
                         nome_pedido = data
+                        print(nome_pedido)
                         if nome_pedido in cardapio:
+                            lista_pedidos.append(
+                                {   'pedido' : nome_pedido, 'valor' : cardapio[nome_pedido],
+                                    'nome' :  clients[client_address].nome, 'mesa' : clients[client_address].mesa 
+                                }
+                            )
                             clients[client_address].novo_pedido.append(nome_pedido)
                             clients[client_address].valor_gasto += cardapio[nome_pedido]
                             pedidos_restantes = clients[client_address].novo_pedido_qnt - len(clients[client_address].novo_pedido)
@@ -105,23 +155,65 @@ def run_command(command, args, client_address, data):
                         else:
                             serv.enviar('Pedido inválido.', client_address)
                         
+                    case 'pagamento':
+                        if client_address in clients.keys():
+                            clients[client_address].fase = None
+                            try:
+                                valor = int(data)
+                                resto = clients[client_address].pay(valor)
+                                r_1 = resto
+                                for i in mesas.keys():
+                                    if clients[client_address] in mesas[i]:
+                                        mesa_len = len(mesas[i])
+                                        mesa = i
+                                        break
+                                
+                                ja_pagos = 1
+                                #enquanto tiver troco pra distribuir e gente na mesa para receber e tiver mais troco que pessoa
+                                while (resto > 0 and mesa_len>0 and resto>=mesa_len):
+                                    print(f'{resto // (mesa_len-ja_pagos)} = {resto} // ({mesa_len-ja_pagos})')
+                                    dist = resto // (mesa_len-ja_pagos)
+                                    print(f'{dist}')
+                                    resto = resto % mesa_len-ja_pagos
+                                    mesa_len = 0
+                                    r = 0
+                                    for colega in mesas[mesa]:
+                                        if colega.valor_pago < colega.valor_gasto:
+                                            r += colega.pay(dist)
+                                            mesa_len += 1
+                                    resto += r
+                                            
+                                
+                                if r_1 == 0:
+                                    serv.enviar('Obrigado pelo pagamento, falta {} para concluir'.format(
+                                        clients[client_address].valor_gasto - clients[client_address].valor_pago), client_address)
+                                else:
+                                    serv.enviar(f'Obrigado pelo pagamento, o troco do seu pagamento foi distrbuido entre seus amigos e sobrou {resto} ainda', client_address)
+                                
+                            except ValueError:
+                                serv.enviar('Valor inválido', client_address)
+                        
+                    # operação inválida
                     case _:
                         serv.enviar('Código inválido', client_address)
-                # operação inválida
+    return True
 
 
 if __name__ == '__main__':
     while True:
         data, client_address = serv.receber()
-        print(data)
         message = data
         parts = message.split(':')
         command = parts[0]
         args = parts[1:]
         
-        run_command(command, args, client_address, data)
+        if not run_command(command, args, client_address, data):
+            break
         
         for i in clients.keys():
             print(clients[i])
+    
+    get_relatorio()
+    serv.sock.close()
 
 
